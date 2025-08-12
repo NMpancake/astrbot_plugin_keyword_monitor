@@ -7,7 +7,7 @@ from astrbot.api import logger
 #)
 #from astrbot.api.platform import PlatformAdapterType
 from astrbot.api.message_components import Plain
-from astrbot.api.star import PermissionType
+#from astrbot.api.star import PermissionType
 from typing import Set
 
 @register("keywordprompt", "NMpancake", "一个简单的 关键词监控 插件", "1.0.0")
