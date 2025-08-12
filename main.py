@@ -1,4 +1,4 @@
-from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
+from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 #from astrbot.api import (
@@ -30,16 +30,17 @@ class KeywordPrompt(Star):
         logger.info(f"关键词监控插件已加载，主人QQ: {self.master_qq}")
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
-    async def monitor_group_message(self, event: AstrMessageEvent):
+    async def monitor_group_message(self, context: Context, event: AstrMessageEvent):
         """监控群消息中的关键词"""
-        group_id = event.get_group_id()
+        group_id = event.message_obj.get_group_id()
 
         # 检查群是否在白名单中
-        if group_id not in self.allowed_groups:
+        if "all" not in self.allowed_groups and group_id not in self.allowed_groups:
             return  # 不在白名单中，忽略消息
         
         message_text = event.message_str
         sender_id = event.get_sender_id()
+        sender_name = event.get_sender_name()
 
         # 检查消息是否包含关键词
         for keyword in self.keywords:
@@ -49,7 +50,7 @@ class KeywordPrompt(Star):
                     f"⚠️ 检测到关键词触发！\n"
                     f"▸ 关键词: {keyword}\n"
                     f"▸ 群号: {group_id}\n"
-                    f"▸ 发送者: {sender_id}\n"
+                    f"▸ 发送者: {sender_name}\n{sender_id}\n"
                     f"▸ 内容: {message_text[:50]}..."  # 截取前50字符
                 )
 
