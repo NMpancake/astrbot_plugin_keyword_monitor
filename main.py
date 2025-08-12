@@ -1,14 +1,14 @@
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
-from astrbot.api import (
-    Star, register, Context, logger,
-    filter, AstrMessageEvent, MessageEventResult
-)
-from astrbot.api.platform import PlatformAdapterType
+#from astrbot.api import (
+#    Star, register, Context, logger,
+#    filter, AstrMessageEvent, MessageEventResult
+#)
+#from astrbot.api.platform import PlatformAdapterType
 from astrbot.api.message_components import Plain
-from astrbot.permission import PermissionType
-from typing import List, Set
+from astrbot.api.star import PermissionType
+from typing import Set
 
 @register("keywordprompt", "NMpancake", "一个简单的 关键词监控 插件", "1.0.0")
 class KeywordPrompt(Star):
@@ -62,7 +62,8 @@ class KeywordPrompt(Star):
                 break # 发现一个关键词就停止检查
 
     # 群白名单管理命令
-    @filter.command("添加监控群", permission=PermissionType.SUPERUSER)
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("添加监控群")
     @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
     async def add_group(self, event: AstrMessageEvent, group_id: str):
         """添加群到白名单"""
@@ -78,7 +79,8 @@ class KeywordPrompt(Star):
             yield event.plain_result(f"✅ 已添加群 {group_id} 到白名单")
             logger.info(f"添加监控群: {group_id}")
 
-    @filter.command("移除监控群", permission=PermissionType.SUPERUSER)
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("移除监控群")
     @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
     async def remove_group(self, event: AstrMessageEvent, group_id: str):
         """从白名单移除群"""
@@ -90,7 +92,8 @@ class KeywordPrompt(Star):
         else:
             yield event.plain_result(f"⛔ 群 {group_id} 不在白名单中")
 
-    @filter.command("监控群列表", permission=PermissionType.SUPERUSER)
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("监控群列表")
     @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
     async def list_groups(self, event: AstrMessageEvent):
         """查看当前白名单群组"""
@@ -98,7 +101,8 @@ class KeywordPrompt(Star):
             yield event.plain_result("当前没有监控群组")
             return
     
-    @filter.command("开启所有群监控", permission=PermissionType.SUPERUSER)
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("开启所有群监控")
     @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
     async def enable_all_groups(self, event: AstrMessageEvent):
         """开启所有群监控（特殊值：all）"""
@@ -106,8 +110,9 @@ class KeywordPrompt(Star):
         self._save_config()
         yield event.plain_result("✅ 已开启所有群组监控")
         logger.info("开启所有群监控")
-
-    @filter.command("关闭所有群监控", permission=PermissionType.SUPERUSER)
+    
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("关闭所有群监控")
     @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
     async def disable_all_groups(self, event: AstrMessageEvent):
         """关闭所有群监控"""
@@ -126,8 +131,9 @@ class KeywordPrompt(Star):
         self.context.config.save_config()
         logger.info(f"已保存白名单配置: {groups_str}")
 
-
-    @filter.command("添加关键词", permission=PermissionType.SUPERUSER)
+    # 关键词管理命令
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("添加关键词")
     @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
     async def add_keyword(self, event: AstrMessageEvent, keyword: str):
         """添加新的监控关键词"""
@@ -142,14 +148,15 @@ class KeywordPrompt(Star):
             yield event.plain_result(f"✅ 已添加关键词: {keyword}")
             logger.info(f"添加关键词: {keyword}")
 
-    @filter.command("移除关键词", permission=PermissionType.SUPERUSER)
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("移除关键词")
     @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
     async def remove_keyword(self, event: AstrMessageEvent, keyword: str):
         """移除现有监控关键词"""
         if not keyword:
             yield event.plain_result("请输入要移除的关键词")
             return
-            
+        
         if keyword in self.keywords:
             self.keywords.remove(keyword)
             yield event.plain_result(f"✅ 已移除关键词: {keyword}")
@@ -157,7 +164,8 @@ class KeywordPrompt(Star):
         else:
             yield event.plain_result(f"⛔ 关键词不存在: {keyword}")
 
-    @filter.command("关键词列表", permission=PermissionType.SUPERUSER)
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("关键词列表")
     @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
     async def list_keywords(self, event: AstrMessageEvent):
         """查看当前所有监控关键词"""
@@ -171,7 +179,3 @@ class KeywordPrompt(Star):
     async def terminate(self):
         """插件卸载时的清理操作"""
         logger.info("关键词监控插件已卸载")
-
-
-def setup(context: Context):
-    return KeywordPrompt(context)
