@@ -17,7 +17,7 @@ class KeywordPrompt(Star):
         # init keyword group
         self.keywords: Set[str] = {"代课"}
         # get master QQ
-        self.master_qq = self.context.congit.get("master_qq", "2461248172")
+        self.master_qq = self.context.config.get("master_qq", "2461248172")
 
         # 初始化群白名单（存储群号）
         self.allowed_groups: Set[str] = set()
