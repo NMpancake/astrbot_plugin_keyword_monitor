@@ -1,182 +1,179 @@
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
-#from astrbot.api import (
-#    Star, register, Context, logger,
-#    filter, AstrMessageEvent, MessageEventResult
-#)
-#from astrbot.api.platform import PlatformAdapterType
 from astrbot.api.message_components import Plain
-#from astrbot.api.star import PermissionType
-from typing import Set
+import asyncio
+import re
 
-@register("keywordprompt", "NMpancake", "一个简单的 关键词监控 插件", "1.0.0")
-class KeywordPrompt(Star):
+@register("keyword_monitor", "NMpancake", "监控群聊关键词", "0.0.9")
+class KeywordMonitorPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
-        # init keyword group
-        self.keywords: Set[str] = {"代课"}
-        # get master QQ
-        self.master_qq = self.context.config.get("master_qq", "2461248172")
-
-        # 初始化群白名单（存储群号）
-        self.allowed_groups: Set[str] = set()
-
-        # 从配置加载初始白名单
-        if "allowed_groups" in self.context.config:
-            self.allowed_groups = set(self.context.config["allowed_groups"].split(","))
-            logger.info(f"已加载白名单群组: {self.allowed_groups}")
-
-        logger.info(f"关键词监控插件已加载，主人QQ: {self.master_qq}")
+        # 初始化配置
+        self.keywords = ["重要", "紧急", "漏洞"]  # 默认关键词
+        self.white_list = ["987654321", "112233445"]  # 默认白名单群号
+        self.admin_qq = "123456789"  # 默认管理员QQ
+        logger.info("关键词监控插件已加载!")
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
-    async def monitor_group_message(self, context: Context, event: AstrMessageEvent):
-        """监控群消息中的关键词"""
-        group_id = event.message_obj.get_group_id()
-
-        # 检查群是否在白名单中
-        if "all" not in self.allowed_groups and group_id not in self.allowed_groups:
-            return  # 不在白名单中，忽略消息
-        
-        message_text = event.message_str
-        sender_id = event.get_sender_id()
-        sender_name = event.get_sender_name()
-
-        # 检查消息是否包含关键词
-        for keyword in self.keywords:
-            if keyword in message_text:
-                # init prompt message
-                alert_msg = (
-                    f"⚠️ 检测到关键词触发！\n"
-                    f"▸ 关键词: {keyword}\n"
-                    f"▸ 群号: {group_id}\n"
-                    f"▸ 发送者: {sender_name}\n{sender_id}\n"
-                    f"▸ 内容: {message_text[:50]}..."  # 截取前50字符
-                )
-
-                # 发送私聊通知给主人
-                await self.context.send_message(
-                    unified_msg_origin=f"private:{self.master_qq}",
-                    chain=[Plain(text=alert_msg)]
-                )
-                logger.info(f"已向主人发送关键词警报: {keyword}")
-                break # 发现一个关键词就停止检查
-
-    # 群白名单管理命令
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("添加监控群")
-    @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
-    async def add_group(self, event: AstrMessageEvent, group_id: str):
-        """添加群到白名单"""
-        if not group_id.isdigit():
-            yield event.plain_result("⛔ 群号必须为数字")
-            return
+    async def monitor_keywords(self, event: AstrMessageEvent):
+        """监控群聊中的关键词"""
+        try:
+            # 检查是否在白名单群聊中
+            group_id = event.get_group_id()
+            if group_id not in self.white_list:
+                return
             
-        if group_id in self.allowed_groups:
-            yield event.plain_result(f"⛔ 群 {group_id} 已在白名单中")
-        else:
-            self.allowed_groups.add(group_id)
-            self._save_config()  # 保存配置
-            yield event.plain_result(f"✅ 已添加群 {group_id} 到白名单")
-            logger.info(f"添加监控群: {group_id}")
+            # 检查消息内容是否包含关键词
+            message = event.message_str
+            for keyword in self.keywords:
+                if keyword in message:
+                    # 获取发送者信息
+                    sender_id = event.get_sender_id()
+                    sender_name = event.get_sender_name()
+                    
+                    # 构建通知消息
+                    alert_msg = (
+                        f"⚠️ 检测到关键词警报 ⚠️\n"
+                        f"关键词: {keyword}\n"
+                        f"群号: {group_id}\n"
+                        f"发送者: {sender_name}({sender_id})\n"
+                        f"消息内容: {message[:50]}{'...' if len(message) > 50 else ''}"
+                    )
+                    
+                    # 发送私聊通知给管理员
+                    await self.send_private_alert(alert_msg)
+                    logger.warning(f"检测到关键词: {keyword} 在群 {group_id} 由 {sender_id} 发送")
+                    break
+        except Exception as e:
+            logger.error(f"监控插件出错: {str(e)}")
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("移除监控群")
-    @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
-    async def remove_group(self, event: AstrMessageEvent, group_id: str):
-        """从白名单移除群"""
-        if group_id in self.allowed_groups:
-            self.allowed_groups.remove(group_id)
-            self._save_config()  # 保存配置
-            yield event.plain_result(f"✅ 已从白名单移除群 {group_id}")
-            logger.info(f"移除监控群: {group_id}")
-        else:
-            yield event.plain_result(f"⛔ 群 {group_id} 不在白名单中")
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("监控群列表")
-    @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
-    async def list_groups(self, event: AstrMessageEvent):
-        """查看当前白名单群组"""
-        if not self.allowed_groups:
-            yield event.plain_result("当前没有监控群组")
-            return
-    
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("开启所有群监控")
-    @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
-    async def enable_all_groups(self, event: AstrMessageEvent):
-        """开启所有群监控（特殊值：all）"""
-        self.allowed_groups = {"all"}
-        self._save_config()
-        yield event.plain_result("✅ 已开启所有群组监控")
-        logger.info("开启所有群监控")
-    
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("关闭所有群监控")
-    @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
-    async def disable_all_groups(self, event: AstrMessageEvent):
-        """关闭所有群监控"""
-        self.allowed_groups = set()
-        self._save_config()
-        yield event.plain_result("✅ 已关闭所有群组监控")
-        logger.info("关闭所有群监控")
-    
-    def _save_config(self):
-        """保存配置到插件管理器"""
-        # 将白名单转换为逗号分隔的字符串
-        groups_str = ",".join(self.allowed_groups)
-        
-        # 更新配置
-        self.context.config["allowed_groups"] = groups_str
-        self.context.config.save_config()
-        logger.info(f"已保存白名单配置: {groups_str}")
-
-    # 关键词管理命令
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("添加关键词")
-    @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
-    async def add_keyword(self, event: AstrMessageEvent, keyword: str):
-        """添加新的监控关键词"""
-        if not keyword:
-            yield event.plain_result("请输入要添加的关键词")
-            return
-            
-        if keyword in self.keywords:
-            yield event.plain_result(f"⛔ 关键词已存在: {keyword}")
-        else:
-            self.keywords.add(keyword)
-            yield event.plain_result(f"✅ 已添加关键词: {keyword}")
-            logger.info(f"添加关键词: {keyword}")
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("移除关键词")
-    @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
-    async def remove_keyword(self, event: AstrMessageEvent, keyword: str):
-        """移除现有监控关键词"""
-        if not keyword:
-            yield event.plain_result("请输入要移除的关键词")
+    @filter.command("km_admin", permission_type=filter.PermissionType.ADMIN)
+    async def admin_commands(self, event: AstrMessageEvent, command: str = None):
+        """管理员命令入口"""
+        if not command:
+            yield event.plain_result(
+                "🔑 关键词监控管理命令 🔑\n"
+                "----------------------\n"
+                "1. 添加关键词: /km_admin add_key [关键词]\n"
+                "2. 删除关键词: /km_admin del_key [关键词]\n"
+                "3. 列出关键词: /km_admin list_keys\n"
+                "4. 添加白名单群: /km_admin add_group [群号]\n"
+                "5. 删除白名单群: /km_admin del_group [群号]\n"
+                "6. 列出白名单: /km_admin list_groups\n"
+                "7. 设置管理员QQ: /km_admin set_admin [QQ号]"
+            )
             return
         
-        if keyword in self.keywords:
-            self.keywords.remove(keyword)
-            yield event.plain_result(f"✅ 已移除关键词: {keyword}")
-            logger.info(f"移除关键词: {keyword}")
+        command_parts = command.split(maxsplit=1)
+        action = command_parts[0].lower()
+        param = command_parts[1] if len(command_parts) > 1 else None
+        
+        # 根据命令类型处理
+        if action == "add_key" and param:
+            await self.add_keyword(param, event)
+        elif action == "del_key" and param:
+            await self.remove_keyword(param, event)
+        elif action == "list_keys":
+            await self.list_keywords(event)
+        elif action == "add_group" and param:
+            await self.add_white_group(param, event)
+        elif action == "del_group" and param:
+            await self.remove_white_group(param, event)
+        elif action == "list_groups":
+            await self.list_white_groups(event)
+        elif action == "set_admin" and param:
+            await self.set_admin_qq(param, event)
         else:
-            yield event.plain_result(f"⛔ 关键词不存在: {keyword}")
+            yield event.plain_result("❌ 无效命令或参数，请使用 /km_admin 查看帮助")
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("关键词列表")
-    @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
+    async def add_keyword(self, keyword: str, event: AstrMessageEvent):
+        """添加关键词"""
+        if keyword in self.keywords:
+            yield event.plain_result(f"❌ 关键词 '{keyword}' 已存在")
+            return
+        
+        self.keywords.append(keyword)
+        yield event.plain_result(f"✅ 已添加关键词: {keyword}")
+        logger.info(f"管理员添加关键词: {keyword}")
+
+    async def remove_keyword(self, keyword: str, event: AstrMessageEvent):
+        """删除关键词"""
+        if keyword not in self.keywords:
+            yield event.plain_result(f"❌ 关键词 '{keyword}' 不存在")
+            return
+        
+        self.keywords.remove(keyword)
+        yield event.plain_result(f"✅ 已删除关键词: {keyword}")
+        logger.info(f"管理员删除关键词: {keyword}")
+
     async def list_keywords(self, event: AstrMessageEvent):
-        """查看当前所有监控关键词"""
+        """列出所有关键词"""
         if not self.keywords:
-            yield event.plain_result("当前没有监控关键词")
+            yield event.plain_result("🔍 当前没有监控关键词")
             return
+        
+        keywords_list = "\n".join([f"• {kw}" for kw in self.keywords])
+        yield event.plain_result(f"📝 监控关键词列表:\n{keywords_list}")
+
+    async def add_white_group(self, group_id: str, event: AstrMessageEvent):
+        """添加白名单群"""
+        if not re.match(r"^\d+$", group_id):
+            yield event.plain_result("❌ 群号必须是纯数字")
+            return
+        
+        if group_id in self.white_list:
+            yield event.plain_result(f"❌ 群 {group_id} 已在白名单中")
+            return
+        
+        self.white_list.append(group_id)
+        yield event.plain_result(f"✅ 已添加白名单群: {group_id}")
+        logger.info(f"管理员添加白名单群: {group_id}")
+
+    async def remove_white_group(self, group_id: str, event: AstrMessageEvent):
+        """删除白名单群"""
+        if group_id not in self.white_list:
+            yield event.plain_result(f"❌ 群 {group_id} 不在白名单中")
+            return
+        
+        self.white_list.remove(group_id)
+        yield event.plain_result(f"✅ 已移除白名单群: {group_id}")
+        logger.info(f"管理员移除白名单群: {group_id}")
+
+    async def list_white_groups(self, event: AstrMessageEvent):
+        """列出白名单群"""
+        if not self.white_list:
+            yield event.plain_result("🔍 当前没有白名单群")
+            return
+        
+        groups_list = "\n".join([f"• {group}" for group in self.white_list])
+        yield event.plain_result(f"📝 白名单群列表:\n{groups_list}")
+
+    async def set_admin_qq(self, qq: str, event: AstrMessageEvent):
+        """设置管理员QQ"""
+        if not re.match(r"^\d{5,12}$", qq):
+            yield event.plain_result("❌ 无效的QQ号格式")
+            return
+        
+        self.admin_qq = qq
+        yield event.plain_result(f"✅ 管理员QQ已设置为: {qq}")
+        logger.info(f"管理员QQ更新为: {qq}")
+
+    async def send_private_alert(self, message: str):
+        """发送私聊通知给管理员"""
+        try:
+            # 构建私聊会话ID
+            session_id = f"aiocqhttp:FRIEND_MESSAGE:{self.admin_qq}"
             
-        keyword_list = "\n".join(f"• {kw}" for kw in self.keywords)
-        yield event.plain_result(f"📝 监控关键词列表:\n{keyword_list}")
+            # 创建消息链
+            message_chain = [Plain(text=message)]
+            
+            # 发送消息
+            await self.context.send_message(session_id, message_chain)
+            logger.info(f"已向管理员 {self.admin_qq} 发送警报消息")
+        except Exception as e:
+            logger.error(f"发送私聊通知失败: {str(e)}")
 
     async def terminate(self):
-        """插件卸载时的清理操作"""
+        """插件卸载时执行"""
         logger.info("关键词监控插件已卸载")
