@@ -4,16 +4,56 @@ from astrbot.api import logger
 from astrbot.api.message_components import Plain
 import asyncio
 import re
+import json
+import os
 
-@register("keyword_monitor", "NMpancake", "监控群聊关键词", "0.0.9")
+@register("keyword_monitor", "AstrBot Developer", "监控群聊关键词并支持命令管理", "1.0.0")
 class KeywordMonitorPlugin(Star):
-    def __init__(self, context: Context):
+    def __init__(self, context: Context, config):
         super().__init__(context)
-        # 初始化配置
-        self.keywords = ["重要", "紧急", "漏洞"]  # 默认关键词
-        self.white_list = ["987654321", "112233445"]  # 默认白名单群号
-        self.admin_qq = "123456789"  # 默认管理员QQ
+        self.config = config
+        self.config_file = os.path.join(os.path.dirname(__file__), "config.json")
+        
+        # 加载配置
+        self.load_config()
         logger.info("关键词监控插件已加载!")
+    
+    def load_config(self):
+        """从配置文件加载配置"""
+        try:
+            # 如果配置文件存在，则加载
+            if os.path.exists(self.config_file):
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+                    self.keywords = config_data.get('keywords', ["重要", "紧急", "漏洞"])
+                    self.white_list = config_data.get('white_list', ["987654321", "112233445"])
+                    self.admin_qq = config_data.get('admin_qq', "123456789")
+            else:
+                # 否则使用默认配置
+                self.keywords = ["重要", "紧急", "漏洞"]
+                self.white_list = ["987654321", "112233445"]
+                self.admin_qq = "123456789"
+                self.save_config()
+        except Exception as e:
+            logger.error(f"加载配置文件失败: {str(e)}")
+            # 加载失败时使用默认配置
+            self.keywords = ["重要", "紧急", "漏洞"]
+            self.white_list = ["987654321", "112233445"]
+            self.admin_qq = "123456789"
+
+    def save_config(self):
+        """保存配置到文件"""
+        try:
+            config_data = {
+                'keywords': self.keywords,
+                'white_list': self.white_list,
+                'admin_qq': self.admin_qq
+            }
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                json.dump(config_data, f, ensure_ascii=False, indent=2)
+            logger.info("配置文件已保存")
+        except Exception as e:
+            logger.error(f"保存配置文件失败: {str(e)}")
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     async def monitor_keywords(self, event: AstrMessageEvent):
@@ -71,19 +111,19 @@ class KeywordMonitorPlugin(Star):
         
         # 根据命令类型处理
         if action == "add_key" and param:
-            await self.add_keyword(param, event)
+            yield  self.add_keyword(param, event)
         elif action == "del_key" and param:
-            await self.remove_keyword(param, event)
+            yield  self.remove_keyword(param, event)
         elif action == "list_keys":
-            await self.list_keywords(event)
+            yield  self.list_keywords(event)
         elif action == "add_group" and param:
-            await self.add_white_group(param, event)
+            yield  self.add_white_group(param, event)
         elif action == "del_group" and param:
-            await self.remove_white_group(param, event)
+            yield  self.remove_white_group(param, event)
         elif action == "list_groups":
-            await self.list_white_groups(event)
+            yield  self.list_white_groups(event)
         elif action == "set_admin" and param:
-            await self.set_admin_qq(param, event)
+            yield  self.set_admin_qq(param, event)
         else:
             yield event.plain_result("❌ 无效命令或参数，请使用 /km_admin 查看帮助")
 
@@ -94,6 +134,7 @@ class KeywordMonitorPlugin(Star):
             return
         
         self.keywords.append(keyword)
+        self.save_config()
         yield event.plain_result(f"✅ 已添加关键词: {keyword}")
         logger.info(f"管理员添加关键词: {keyword}")
 
@@ -104,6 +145,7 @@ class KeywordMonitorPlugin(Star):
             return
         
         self.keywords.remove(keyword)
+        self.save_config()
         yield event.plain_result(f"✅ 已删除关键词: {keyword}")
         logger.info(f"管理员删除关键词: {keyword}")
 
@@ -127,6 +169,7 @@ class KeywordMonitorPlugin(Star):
             return
         
         self.white_list.append(group_id)
+        self.save_config()
         yield event.plain_result(f"✅ 已添加白名单群: {group_id}")
         logger.info(f"管理员添加白名单群: {group_id}")
 
@@ -137,6 +180,7 @@ class KeywordMonitorPlugin(Star):
             return
         
         self.white_list.remove(group_id)
+        self.save_config()
         yield event.plain_result(f"✅ 已移除白名单群: {group_id}")
         logger.info(f"管理员移除白名单群: {group_id}")
 
@@ -156,6 +200,7 @@ class KeywordMonitorPlugin(Star):
             return
         
         self.admin_qq = qq
+        self.save_config()
         yield event.plain_result(f"✅ 管理员QQ已设置为: {qq}")
         logger.info(f"管理员QQ更新为: {qq}")
 
