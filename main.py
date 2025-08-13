@@ -81,8 +81,8 @@ class KeywordMonitorPlugin(Star):
                         f"消息内容: {message[:50]}{'...' if len(message) > 50 else ''}"
                     )
                     
-                    # 发送私聊通知给管理员
-                    await self.send_private_alert(alert_msg)
+                    # 发送私聊通知给管理员 #
+                    yield self.send_private_alert(alert_msg)
                     logger.warning(f"检测到关键词: {keyword} 在群 {group_id} 由 {sender_id} 发送")
                     break
         except Exception as e:
@@ -213,8 +213,8 @@ class KeywordMonitorPlugin(Star):
             # 创建消息链
             message_chain = [Plain(text=message)]
             
-            # 发送消息
-            await self.context.send_message(session_id, message_chain)
+            # 发送消息 #
+            yield self.context.send_message(session_id, message_chain)
             logger.info(f"已向管理员 {self.admin_qq} 发送警报消息")
         except Exception as e:
             logger.error(f"发送私聊通知失败: {str(e)}")
