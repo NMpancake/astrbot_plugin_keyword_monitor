@@ -109,21 +109,21 @@ class KeywordMonitorPlugin(Star):
         action = command_parts[0].lower()
         param = command_parts[1] if len(command_parts) > 1 else None
         
-        # 根据命令类型处理
+        # 根据命令类型处理 - 使用yield from调用其他异步生成器函数
         if action == "add_key" and param:
-            yield  self.add_keyword(param, event)
+            yield self.add_keyword(param, event)
         elif action == "del_key" and param:
-            yield  self.remove_keyword(param, event)
+            yield self.remove_keyword(param, event)
         elif action == "list_keys":
-            yield  self.list_keywords(event)
+            yield self.list_keywords(event)
         elif action == "add_group" and param:
-            yield  self.add_white_group(param, event)
+            yield self.add_white_group(param, event)
         elif action == "del_group" and param:
-            yield  self.remove_white_group(param, event)
+            yield self.remove_white_group(param, event)
         elif action == "list_groups":
-            yield  self.list_white_groups(event)
+            yield self.list_white_groups(event)
         elif action == "set_admin" and param:
-            yield  self.set_admin_qq(param, event)
+            yield self.set_admin_qq(param, event)
         else:
             yield event.plain_result("❌ 无效命令或参数，请使用 /km_admin 查看帮助")
 
