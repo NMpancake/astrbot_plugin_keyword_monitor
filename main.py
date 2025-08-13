@@ -1,4 +1,5 @@
 from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api import MessageType
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 from astrbot.api.message_components import Plain
@@ -184,8 +185,12 @@ class KeywordMonitorPlugin(Star):
     async def send_private_alert(self, message: str):
         """发送私聊通知给管理员"""
         try:
-            # 构建私聊会话ID
-            session_id = f"aiocqhttp:FRIEND_MESSAGE:{self.admin_qq}"
+            # 获取正确的消息类型枚举值
+            # 使用 MessageType.FRIEND_MESSAGE.value 获取实际值
+            message_type_value = MessageType.FRIEND_MESSAGE.value
+            
+            # 构建私聊会话ID - 使用正确的消息类型值
+            session_id = f"aiocqhttp:{message_type_value}:{self.admin_qq}"
             
             # 创建消息链
             message_chain = [Plain(text=message)]
