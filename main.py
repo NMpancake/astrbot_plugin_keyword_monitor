@@ -109,107 +109,77 @@ class KeywordMonitorPlugin(Star):
         action = command_parts[0].lower()
         param = command_parts[1] if len(command_parts) > 1 else None
         
-        # 根据命令类型处理 - 使用yield from调用其他异步生成器函数
+        # 根据命令类型直接处理逻辑
         if action == "add_key" and param:
-            async for response in self.add_keyword(param, event):
-                yield response
+            # 添加关键词
+            if param in self.keywords:
+                yield event.plain_result(f"❌ 关键词 '{param}' 已存在")
+            else:
+                self.keywords.append(param)
+                self.save_config()
+                yield event.plain_result(f"✅ 已添加关键词: {param}")
+                logger.info(f"管理员添加关键词: {param}")
+        
         elif action == "del_key" and param:
-            async for response in self.remove_keyword(param, event):
-                yield response
+            # 删除关键词
+            if param not in self.keywords:
+                yield event.plain_result(f"❌ 关键词 '{param}' 不存在")
+            else:
+                self.keywords.remove(param)
+                self.save_config()
+                yield event.plain_result(f"✅ 已删除关键词: {param}")
+                logger.info(f"管理员删除关键词: {param}")
+        
         elif action == "list_keys":
-            async for response in self.list_keywords(event):
-                yield response
+            # 列出所有关键词
+            if not self.keywords:
+                yield event.plain_result("🔍 当前没有监控关键词")
+            else:
+                keywords_list = "\n".join([f"• {kw}" for kw in self.keywords])
+                yield event.plain_result(f"📝 监控关键词列表:\n{keywords_list}")
+        
         elif action == "add_group" and param:
-            async for response in self.add_white_group(param, event):
-                yield response
+            # 添加白名单群
+            if not re.match(r"^\d+$", param):
+                yield event.plain_result("❌ 群号必须是纯数字")
+            elif param in self.white_list:
+                yield event.plain_result(f"❌ 群 {param} 已在白名单中")
+            else:
+                self.white_list.append(param)
+                self.save_config()
+                yield event.plain_result(f"✅ 已添加白名单群: {param}")
+                logger.info(f"管理员添加白名单群: {param}")
+        
         elif action == "del_group" and param:
-            async for response in self.remove_white_group(param, event):
-                yield response
+            # 删除白名单群
+            if param not in self.white_list:
+                yield event.plain_result(f"❌ 群 {param} 不在白名单中")
+            else:
+                self.white_list.remove(param)
+                self.save_config()
+                yield event.plain_result(f"✅ 已移除白名单群: {param}")
+                logger.info(f"管理员移除白名单群: {param}")
+        
         elif action == "list_groups":
-            async for response in self.list_white_groups(event):
-                yield response
+            # 列出白名单群
+            if not self.white_list:
+                yield event.plain_result("🔍 当前没有白名单群")
+            else:
+                groups_list = "\n".join([f"• {group}" for group in self.white_list])
+                yield event.plain_result(f"📝 白名单群列表:\n{groups_list}")
+        
         elif action == "set_admin" and param:
-            async for response in self.set_admin_qq(param, event):
-                yield response
+            # 设置管理员QQ
+            if not re.match(r"^\d{5,12}$", param):
+                yield event.plain_result("❌ 无效的QQ号格式")
+            else:
+                self.admin_qq = param
+                self.save_config()
+                yield event.plain_result(f"✅ 管理员QQ已设置为: {param}")
+                logger.info(f"管理员QQ更新为: {param}")
+        
         else:
             yield event.plain_result("❌ 无效命令或参数，请使用 /km_admin 查看帮助")
-
-    async def add_keyword(self, keyword: str, event: AstrMessageEvent):
-        """添加关键词"""
-        if keyword in self.keywords:
-            yield event.plain_result(f"❌ 关键词 '{keyword}' 已存在")
-            return
-        
-        self.keywords.append(keyword)
-        self.save_config()
-        yield event.plain_result(f"✅ 已添加关键词: {keyword}")
-        logger.info(f"管理员添加关键词: {keyword}")
-
-    async def remove_keyword(self, keyword: str, event: AstrMessageEvent):
-        """删除关键词"""
-        if keyword not in self.keywords:
-            yield event.plain_result(f"❌ 关键词 '{keyword}' 不存在")
-            return
-        
-        self.keywords.remove(keyword)
-        self.save_config()
-        yield event.plain_result(f"✅ 已删除关键词: {keyword}")
-        logger.info(f"管理员删除关键词: {keyword}")
-
-    async def list_keywords(self, event: AstrMessageEvent):
-        """列出所有关键词"""
-        if not self.keywords:
-            yield event.plain_result("🔍 当前没有监控关键词")
-            return
-        
-        keywords_list = "\n".join([f"• {kw}" for kw in self.keywords])
-        yield event.plain_result(f"📝 监控关键词列表:\n{keywords_list}")
-
-    async def add_white_group(self, group_id: str, event: AstrMessageEvent):
-        """添加白名单群"""
-        if not re.match(r"^\d+$", group_id):
-            yield event.plain_result("❌ 群号必须是纯数字")
-            return
-        
-        if group_id in self.white_list:
-            yield event.plain_result(f"❌ 群 {group_id} 已在白名单中")
-            return
-        
-        self.white_list.append(group_id)
-        self.save_config()
-        yield event.plain_result(f"✅ 已添加白名单群: {group_id}")
-        logger.info(f"管理员添加白名单群: {group_id}")
-
-    async def remove_white_group(self, group_id: str, event: AstrMessageEvent):
-        """删除白名单群"""
-        if group_id not in self.white_list:
-            yield event.plain_result(f"❌ 群 {group_id} 不在白名单中")
-            return
-        
-        self.white_list.remove(group_id)
-        self.save_config()
-        yield event.plain_result(f"✅ 已移除白名单群: {group_id}")
-        logger.info(f"管理员移除白名单群: {group_id}")
-
-    async def list_white_groups(self, event: AstrMessageEvent):
-        """列出白名单群"""
-        if not self.white_list:
-            yield event.plain_result("🔍 当前没有白名单群")
-            return
-        
-        groups_list = "\n".join([f"• {group}" for group in self.white_list])
-        yield event.plain_result(f"📝 白名单群列表:\n{groups_list}")
-
-    async def set_admin_qq(self, qq: str, event: AstrMessageEvent):
-        """设置管理员QQ"""
-        if not re.match(r"^\d{5,12}$", qq):
-            yield event.plain_result("❌ 无效的QQ号格式")
-            return
-        
-        self.admin_qq = qq
-        self.save_config()
-        yield event.plain_result(f"✅ 管理员QQ已设置为: {qq}")
-        logger.info(f"管理员QQ更新为: {qq}")
 
     async def send_private_alert(self, message: str):
         """发送私聊通知给管理员"""
@@ -220,7 +190,7 @@ class KeywordMonitorPlugin(Star):
             # 创建消息链
             message_chain = [Plain(text=message)]
             
-            # 发送消息 - 使用context的send_message方法
+            # 发送消息
             await self.context.send_message(session_id, message_chain)
             logger.info(f"已向管理员 {self.admin_qq} 发送警报消息")
         except Exception as e:
