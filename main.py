@@ -1,5 +1,5 @@
-from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.api import MessageType
+from astrbot.api.event import filter, AstrMessageEvent, MessageChain
+from astrbot.core.platform import MessageType
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 from astrbot.api.message_components import Plain
@@ -8,7 +8,7 @@ import re
 import json
 import os
 
-@register("keyword_monitor", "AstrBot Developer", "监控群聊关键词并支持命令管理", "1.0.0")
+@register("keyword_monitor", "NMpancake", "这是一个关键词监控插件", "1.0.0")
 class KeywordMonitorPlugin(Star):
     def __init__(self, context: Context, config):
         super().__init__(context)
@@ -18,6 +18,7 @@ class KeywordMonitorPlugin(Star):
         # 加载配置
         self.load_config()
         logger.info("关键词监控插件已加载!")
+        self.qq_platform = None  # 初始化QQ平台适配器引用
     
     def load_config(self):
         """从配置文件加载配置"""
@@ -26,19 +27,19 @@ class KeywordMonitorPlugin(Star):
             if os.path.exists(self.config_file):
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
-                    self.keywords = config_data.get('keywords', ["重要", "紧急", "漏洞"])
+                    self.keywords = config_data.get('keywords', ["重要", "伊蕾娜", "love~"])
                     self.white_list = config_data.get('white_list', ["987654321", "112233445"])
                     self.admin_qq = config_data.get('admin_qq', "123456789")
             else:
                 # 否则使用默认配置
-                self.keywords = ["重要", "紧急", "漏洞"]
+                self.keywords = ["重要", "伊蕾娜", "love~"]
                 self.white_list = ["987654321", "112233445"]
                 self.admin_qq = "123456789"
                 self.save_config()
         except Exception as e:
             logger.error(f"加载配置文件失败: {str(e)}")
             # 加载失败时使用默认配置
-            self.keywords = ["重要", "紧急", "漏洞"]
+            self.keywords = ["重要", "伊蕾娜", "love~"]
             self.white_list = ["987654321", "112233445"]
             self.admin_qq = "123456789"
 
@@ -55,6 +56,18 @@ class KeywordMonitorPlugin(Star):
             logger.info("配置文件已保存")
         except Exception as e:
             logger.error(f"保存配置文件失败: {str(e)}")
+
+    async def get_qq_platform(self):
+        """获取QQ平台适配器实例"""
+        if self.qq_platform is None:
+            try:
+                # 获取QQ平台适配器
+                self.qq_platform = self.context.get_platform("aiocqhttp")
+                if self.qq_platform is None:
+                    logger.error("无法获取QQ平台适配器")
+            except Exception as e:
+                logger.error(f"获取QQ平台适配器失败: {str(e)}")
+        return self.qq_platform
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     async def monitor_keywords(self, event: AstrMessageEvent):
@@ -83,16 +96,29 @@ class KeywordMonitorPlugin(Star):
                     )
                     
                     # 发送私聊通知给管理员
-                    await self.send_private_alert(alert_msg)
+                    await self.send_private_alert(event, alert_msg)
                     logger.warning(f"检测到关键词: {keyword} 在群 {group_id} 由 {sender_id} 发送")
                     break
         except Exception as e:
             logger.error(f"监控插件出错: {str(e)}")
 
     @filter.command("km_admin", permission_type=filter.PermissionType.ADMIN)
-    async def admin_commands(self, event: AstrMessageEvent, command: str = None):
+    async def admin_commands(self, event: AstrMessageEvent, action: str = None, param: str = None):
         """管理员命令入口"""
-        if not command:
+        #验证发送者是否为管理员QQ
+        sender_qq = event.get_sender_id()
+
+        if not self.admin_qq:
+            yield event.plain_result("❌ 未设置管理员QQ，请联系开发者初始化")
+            return
+
+        if sender_qq != self.admin_qq:
+            yield event.plain_result("❌ 权限不足！仅管理员可使用此命令")
+            logger.warning(f"非管理员{sender_qq}尝试使用管理员命令")
+            return
+        
+        # 如果没有提供命令或参数，显示帮助信息
+        if not action:
             yield event.plain_result(
                 "🔑 关键词监控管理命令 🔑\n"
                 "----------------------\n"
@@ -102,13 +128,12 @@ class KeywordMonitorPlugin(Star):
                 "4. 添加白名单群: /km_admin add_group [群号]\n"
                 "5. 删除白名单群: /km_admin del_group [群号]\n"
                 "6. 列出白名单: /km_admin list_groups\n"
-                "7. 设置管理员QQ: /km_admin set_admin [QQ号]"
+                "7. 设置管理员QQ: /km_admin set_admin [QQ号]\n"
             )
             return
         
-        command_parts = command.split(maxsplit=1)
-        action = command_parts[0].lower()
-        param = command_parts[1] if len(command_parts) > 1 else None
+        action = action.lower()  # 统一转为小写，避免大小写问题
+        param_str = str(param) if param is not None else None
         
         # 根据命令类型直接处理逻辑
         if action == "add_key" and param:
@@ -141,25 +166,25 @@ class KeywordMonitorPlugin(Star):
         
         elif action == "add_group" and param:
             # 添加白名单群
-            if not re.match(r"^\d+$", param):
+            if not re.match(r"^\d+$", param_str):
                 yield event.plain_result("❌ 群号必须是纯数字")
-            elif param in self.white_list:
-                yield event.plain_result(f"❌ 群 {param} 已在白名单中")
+            elif param_str in self.white_list:
+                yield event.plain_result(f"❌ 群 {param_str} 已在白名单中")
             else:
-                self.white_list.append(param)
+                self.white_list.append(param_str)
                 self.save_config()
-                yield event.plain_result(f"✅ 已添加白名单群: {param}")
-                logger.info(f"管理员添加白名单群: {param}")
+                yield event.plain_result(f"✅ 已添加白名单群: {param_str}")
+                logger.info(f"管理员添加白名单群: {param_str}")
         
         elif action == "del_group" and param:
             # 删除白名单群
-            if param not in self.white_list:
-                yield event.plain_result(f"❌ 群 {param} 不在白名单中")
+            if param_str not in self.white_list:
+                yield event.plain_result(f"❌ 群 {param_str} 不在白名单中")
             else:
-                self.white_list.remove(param)
+                self.white_list.remove(param_str)
                 self.save_config()
-                yield event.plain_result(f"✅ 已移除白名单群: {param}")
-                logger.info(f"管理员移除白名单群: {param}")
+                yield event.plain_result(f"✅ 已移除白名单群: {param_str}")
+                logger.info(f"管理员移除白名单群: {param_str}")
         
         elif action == "list_groups":
             # 列出白名单群
@@ -171,35 +196,50 @@ class KeywordMonitorPlugin(Star):
         
         elif action == "set_admin" and param:
             # 设置管理员QQ
-            if not re.match(r"^\d{5,12}$", param):
+            if not re.match(r"^\d{5,12}$", param_str):
                 yield event.plain_result("❌ 无效的QQ号格式")
             else:
-                self.admin_qq = param
+                self.admin_qq = param_str
                 self.save_config()
-                yield event.plain_result(f"✅ 管理员QQ已设置为: {param}")
-                logger.info(f"管理员QQ更新为: {param}")
+                yield event.plain_result(f"✅ 管理员QQ已设置为: {param_str}")
+                logger.info(f"管理员QQ更新为: {param_str}")
         
         else:
             yield event.plain_result("❌ 无效命令或参数，请使用 /km_admin 查看帮助")
 
-    async def send_private_alert(self, message: str):
-        """发送私聊通知给管理员"""
+    # 在admin_commands中添加测试命令
+    @filter.command("test_alert")
+    async def test_alert(self, event: AstrMessageEvent):
+        """测试警报发送功能"""
+        await self.send_private_alert(event, "这是一条测试警报消息")
+        yield event.plain_result("已发送测试警报，请检查管理员QQ")
+    
+    async def send_private_alert(self, event: AstrMessageEvent, message: str):
+        """发送私聊通知给管理员 - 使用context主动发送消息"""
         try:
-            # 获取正确的消息类型枚举值
-            # 使用 MessageType.FRIEND_MESSAGE.value 获取实际值
-            message_type_value = MessageType.FRIEND_MESSAGE.value
+            if not self.admin_qq or not self.admin_qq.isdigit():
+                logger.error("管理员QQ号无效（为空或非数字）")
+                return
+            # 1. 构建管理员私聊的唯一标识符（unified_msg_origin）
+            # 格式：平台名称:消息类型:管理员QQ号
+            admin_unified_msg_origin = f"aiocqhttp:{MessageType.FRIEND_MESSAGE.value}:{self.admin_qq}"
             
-            # 构建私聊会话ID - 使用正确的消息类型值
-            session_id = f"aiocqhttp:{message_type_value}:{self.admin_qq}"
+            # 2. 构建消息链（包含警报文本）
+            from astrbot.api.message_components import Plain
+            message_chain = MessageChain([Plain(text=message)])
             
-            # 创建消息链
-            message_chain = [Plain(text=message)]
+            # 3. 使用context的send_message主动发送到管理员私聊
+            # 该方法需传入目标会话标识和消息链
+            success = await self.context.send_message(admin_unified_msg_origin, message_chain)
             
-            # 发送消息
-            await self.context.send_message(session_id, message_chain)
-            logger.info(f"已向管理员 {self.admin_qq} 发送警报消息")
+            if success:
+                logger.info(f"已向管理员 {self.admin_qq} 发送私聊警报")
+            else:
+                logger.error(f"发送私聊警报失败，未找到管理员会话")
+                
         except Exception as e:
             logger.error(f"发送私聊通知失败: {str(e)}")
+           
 
     async def terminate(self):
         """插件卸载时执行"""
