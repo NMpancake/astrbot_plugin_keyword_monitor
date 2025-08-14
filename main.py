@@ -102,7 +102,7 @@ class KeywordMonitorPlugin(Star):
         except Exception as e:
             logger.error(f"监控插件出错: {str(e)}")
 
-    @filter.command("km_admin", permission_type=filter.PermissionType.ADMIN)
+    @filter.command("km", permission_type=filter.PermissionType.ADMIN)
     async def admin_commands(self, event: AstrMessageEvent, action: str = None, param: str = None):
         """管理员命令入口"""
         #验证发送者是否为管理员QQ
@@ -122,13 +122,13 @@ class KeywordMonitorPlugin(Star):
             yield event.plain_result(
                 "🔑 关键词监控管理命令 🔑\n"
                 "----------------------\n"
-                "1. 添加关键词: /km_admin add_key [关键词]\n"
-                "2. 删除关键词: /km_admin del_key [关键词]\n"
-                "3. 列出关键词: /km_admin list_keys\n"
-                "4. 添加白名单群: /km_admin add_group [群号]\n"
-                "5. 删除白名单群: /km_admin del_group [群号]\n"
-                "6. 列出白名单: /km_admin list_groups\n"
-                "7. 设置管理员QQ: /km_admin set_admin [QQ号]\n"
+                "1. 添加关键词: /km add_key [关键词]\n"
+                "2. 删除关键词: /km del_key [关键词]\n"
+                "3. 列出关键词: /km list_keys\n"
+                "4. 添加白名单群: /km add_group [群号]\n"
+                "5. 删除白名单群: /km del_group [群号]\n"
+                "6. 列出白名单: /km list_groups\n"
+                "7. 设置管理员QQ: /km set_admin [QQ号]\n"
             )
             return
         
@@ -205,7 +205,7 @@ class KeywordMonitorPlugin(Star):
                 logger.info(f"管理员QQ更新为: {param_str}")
         
         else:
-            yield event.plain_result("❌ 无效命令或参数，请使用 /km_admin 查看帮助")
+            yield event.plain_result("❌ 无效命令或参数，请使用 /km 查看帮助")
 
     # 在admin_commands中添加测试命令
     @filter.command("test_alert")
