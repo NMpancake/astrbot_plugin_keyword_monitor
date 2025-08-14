@@ -1,6 +1,6 @@
 # astrbot_plugin_keyword_monitor
 这是一个插件用来提醒我群里出现了我所标记的关键词
-
+<img width="273" height="140" alt="Image" src="https://github.com/user-attachments/assets/a762b603-fad6-457a-8224-7c93b51b68d3" />
 
 ## 如何使用？
 
