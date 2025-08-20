@@ -57,18 +57,6 @@ class KeywordMonitorPlugin(Star):
         except Exception as e:
             logger.error(f"保存配置文件失败: {str(e)}")
 
-    async def get_qq_platform(self):
-        """获取QQ平台适配器实例"""
-        if self.qq_platform is None:
-            try:
-                # 获取QQ平台适配器
-                self.qq_platform = self.context.get_platform("aiocqhttp")
-                if self.qq_platform is None:
-                    logger.error("无法获取QQ平台适配器")
-            except Exception as e:
-                logger.error(f"获取QQ平台适配器失败: {str(e)}")
-        return self.qq_platform
-
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     async def monitor_keywords(self, event: AstrMessageEvent):
         """监控群聊中的关键词"""
@@ -225,7 +213,6 @@ class KeywordMonitorPlugin(Star):
             admin_unified_msg_origin = f"aiocqhttp:{MessageType.FRIEND_MESSAGE.value}:{self.admin_qq}"
             
             # 2. 构建消息链（包含警报文本）
-            from astrbot.api.message_components import Plain
             message_chain = MessageChain([Plain(text=message)])
             
             # 3. 使用context的send_message主动发送到管理员私聊
